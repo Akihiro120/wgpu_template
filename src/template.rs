@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use winit_input_helper::WinitInputHelper;
 
+use crate::gpu_state::GPUState;
+
 #[derive(Default)]
 struct TemplateFactory<T: Template> {
     _marker: std::marker::PhantomData<T>,
@@ -11,8 +13,8 @@ impl<T> TemplateFactory<T>
 where
     T: Template + 'static,
 {
-    pub fn create_template(&self) -> Box<dyn Template> {
-        Box::new(T::create())
+    pub fn create_template(&self, gpu: &mut GPUState) -> Box<dyn Template> {
+        Box::new(T::create(gpu))
     }
 }
 
@@ -22,6 +24,7 @@ pub struct TemplateApplication<T: Template> {
     template_state: Option<Box<dyn Template>>,
     template_factory: TemplateFactory<T>,
     input: WinitInputHelper,
+    gpu_state: Option<GPUState>,
 }
 
 impl<T: Template> TemplateApplication<T> {
@@ -33,6 +36,7 @@ impl<T: Template> TemplateApplication<T> {
                 _marker: std::marker::PhantomData,
             },
             input: WinitInputHelper::default(),
+            gpu_state: None,
         }
     }
 }
@@ -43,7 +47,7 @@ where
 {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         // create the window
-        self.window = Some(Arc::new(
+        let window = Arc::new(
             event_loop
                 .create_window(
                     winit::window::Window::default_attributes()
@@ -51,10 +55,18 @@ where
                         .with_inner_size(winit::dpi::PhysicalSize::new(1280, 720)),
                 )
                 .expect("ERROR: Failed to create window."),
-        ));
+        );
+
+        self.window = Some(window.clone());
+
+        // create gpu state
+        self.gpu_state = Some(GPUState::new(window.clone()));
 
         // create template state
-        self.template_state = Some(self.template_factory.create_template());
+        self.template_state = Some(
+            self.template_factory
+                .create_template(self.gpu_state.as_mut().unwrap()),
+        );
     }
 
     fn window_event(
@@ -63,8 +75,16 @@ where
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        if let Some(size) = self.input.window_resized() {
+            self.gpu_state.as_mut().unwrap().resize(size);
+        }
+
         if self.input.process_window_event(&event) {
             // render stuff here
+            self.template_state
+                .as_mut()
+                .unwrap()
+                .draw(self.gpu_state.as_mut().unwrap());
         }
     }
 
@@ -102,6 +122,9 @@ where
             return;
         }
 
+        // step
+        self.template_state.as_mut().unwrap().step(&mut self.input);
+
         // rebuild and render
         self.window.as_ref().unwrap().request_redraw();
     }
@@ -122,11 +145,11 @@ pub trait Template: 'static {
             .unwrap();
     }
 
-    fn create() -> Self
+    fn create(gpu_state: &mut GPUState) -> Self
     where
         Self: Sized;
 
     fn step(&mut self, input: &mut WinitInputHelper);
-    fn draw(&mut self);
+    fn draw(&mut self, gpu_state: &mut GPUState);
     // fn gui();
 }
