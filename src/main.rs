@@ -1,16 +1,83 @@
 use winit_input_helper::WinitInputHelper;
 
-use crate::{gpu_state::GPUState, template::Template};
+use crate::{
+    gpu_state::{GPUState, begin_render_pass, create_basic_color_attachment, create_texture_view},
+    mesh::Mesh,
+    shader::{Shader, Uniform},
+    template::Template,
+};
 
 mod gpu_state;
+mod mesh;
+mod shader;
 mod template;
 
-pub struct SampleTemplate {}
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Zeroable, bytemuck::Pod)]
+pub struct Vertex {
+    pos: glam::Vec3,
+}
+
+impl Vertex {
+    fn layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![
+                0 => Float32x3
+            ],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct SampleUniform {
+    time: f32,
+}
+
+pub struct SampleTemplate {
+    sample_shader: Shader,
+    sample_uniform: Uniform,
+    sample_mesh: Mesh,
+}
 
 impl Template for SampleTemplate {
     fn create(gpu_state: &mut GPUState) -> Self {
-        println!("Template created.");
-        Self {}
+        let sample_uniform = Uniform::new(&gpu_state.device, &SampleUniform { time: 0.0 });
+
+        let sample_shader = Shader::new(
+            &gpu_state.device,
+            gpu_state.rgb_format,
+            "./src/sample.wgsl",
+            &[Some(Vertex::layout())],
+            &[Some(&sample_uniform)],
+        );
+
+        let sample_mesh = Mesh::new(
+            &gpu_state.device,
+            &[
+                Vertex {
+                    pos: glam::Vec3::new(-0.5, 0.5, 0.0),
+                },
+                Vertex {
+                    pos: glam::Vec3::new(-0.5, -0.5, 0.0),
+                },
+                Vertex {
+                    pos: glam::Vec3::new(0.5, -0.5, 0.0),
+                },
+                Vertex {
+                    pos: glam::Vec3::new(0.5, 0.5, 0.0),
+                },
+            ],
+            &[0, 1, 3, 3, 1, 2],
+        );
+
+        Self {
+            sample_shader,
+            sample_uniform,
+            sample_mesh,
+        }
     }
 
     fn step(&mut self, input: &mut WinitInputHelper) {
@@ -20,39 +87,26 @@ impl Template for SampleTemplate {
     }
 
     fn draw(&mut self, gpu_state: &mut GPUState) {
-        let mut encoder = gpu_state
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        let mut encoder = gpu_state.create_command_encoder();
 
         let Some(surf) = gpu_state.get_surface_texture() else {
             return;
         };
 
-        let view = surf
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let view = create_texture_view(&surf.texture);
 
-        let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.1,
-                        g: 0.1,
-                        b: 0.1,
-                        a: 1.0,
-                    }),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
+        let mut render_pass = begin_render_pass(
+            &mut encoder,
+            &[Some(create_basic_color_attachment(
+                &view,
+                [0.4, 0.4, 0.9, 1.0],
+            ))],
+            None,
+        );
+
+        self.sample_shader.bind_to_render_pass(&mut render_pass);
+        self.sample_uniform.bind_to_render_pass(0, &mut render_pass);
+        self.sample_mesh.bind_to_render_pass(&mut render_pass);
 
         drop(render_pass);
 
