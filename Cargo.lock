@@ -743,6 +743,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "glam"
+version = "0.34.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54af5066834d6c2d404eb26ea036a15b15d9ff80db510b9a73ff95ab07f30831"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "glfw"
 version = "0.63.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2909,6 +2918,8 @@ dependencies = [
 name = "wgpu_template"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
+ "glam",
  "glfw",
  "pollster",
  "wgpu",
