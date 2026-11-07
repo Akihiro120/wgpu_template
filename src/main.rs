@@ -40,6 +40,7 @@ pub struct SampleTemplate {
     sample_shader: Shader,
     sample_uniform: Uniform,
     sample_mesh: Mesh,
+    time: std::time::Instant,
 }
 
 impl Template for SampleTemplate {
@@ -77,6 +78,7 @@ impl Template for SampleTemplate {
             sample_shader,
             sample_uniform,
             sample_mesh,
+            time: std::time::Instant::now(),
         }
     }
 
@@ -87,6 +89,13 @@ impl Template for SampleTemplate {
     }
 
     fn draw(&mut self, gpu_state: &mut GPUState) {
+        self.sample_uniform.update(
+            &gpu_state.queue,
+            &SampleUniform {
+                time: self.time.elapsed().as_secs_f32(),
+            },
+        );
+
         let mut encoder = gpu_state.create_command_encoder();
 
         let Some(surf) = gpu_state.get_surface_texture() else {
