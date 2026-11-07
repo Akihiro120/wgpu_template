@@ -114,4 +114,52 @@ impl GPUState {
 
         Some(surf)
     }
+
+    pub fn create_command_encoder(&self) -> wgpu::CommandEncoder {
+        self.device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default())
+    }
+}
+
+// this function returns a render pass with a lifetime that lasts for as long as the encoder.
+// this ensures that the render pass will not outlive the encoder that makes it
+pub fn begin_render_pass<'a>(
+    encoder: &'a mut wgpu::CommandEncoder,
+    color_attachments: &[Option<wgpu::RenderPassColorAttachment>],
+    depth_stencil_attachment: Option<wgpu::RenderPassDepthStencilAttachment>,
+) -> wgpu::RenderPass<'a> {
+    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Render Pass"),
+        color_attachments,
+        depth_stencil_attachment,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    })
+}
+
+// create a basic color attachment with a view and a color, this color attachment will only last as
+// long as the texture view.
+pub fn create_basic_color_attachment<'tex>(
+    view: &'tex wgpu::TextureView,
+    color: [f64; 4],
+) -> wgpu::RenderPassColorAttachment<'tex> {
+    wgpu::RenderPassColorAttachment {
+        view,
+        depth_slice: None,
+        resolve_target: None,
+        ops: wgpu::Operations {
+            load: wgpu::LoadOp::Clear(wgpu::Color {
+                r: color[0],
+                g: color[1],
+                b: color[2],
+                a: color[3],
+            }),
+            store: wgpu::StoreOp::Store,
+        },
+    }
+}
+
+pub fn create_texture_view(texture: &wgpu::Texture) -> wgpu::TextureView {
+    texture.create_view(&wgpu::TextureViewDescriptor::default())
 }
